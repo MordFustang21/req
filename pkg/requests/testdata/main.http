@@ -1,0 +1,18 @@
+@token=my-token-variable
+@port=8080
+
+### Named Request
+GET http://go.dev
+
+Authorization: Bearer token
+Content-Type: application/json
+
+{"name": "John Doe"}
+
+### Test 2
+GET http://zed.dev
+
+### Request with variables
+GET http://zed.dev:{{port}}
+
+Authorization: Bearer {{token}}
