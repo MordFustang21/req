@@ -111,7 +111,7 @@ func ParseTests(f *os.File) []HTTPTest {
 
 		if currentStep == ParseStepBody {
 			// Add body to test
-			test.Body = []byte(injectVariables(variables, line))
+			test.Body = append(test.Body, injectVariables(variables, line)+"\n"...)
 			continue
 		}
 	}

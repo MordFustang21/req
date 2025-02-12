@@ -9,6 +9,16 @@ Content-Type: application/json
 
 {"name": "John Doe"}
 
+### Multi-line Body
+GET http://go.dev
+
+Authorization: Bearer token
+Content-Type: application/json
+
+{
+    "name": "John Doe"
+}
+
 ### Test 2
 GET http://zed.dev
 

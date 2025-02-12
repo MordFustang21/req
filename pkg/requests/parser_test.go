@@ -30,7 +30,20 @@ func Test_parse(t *testing.T) {
 				"Authorization": []string{"Bearer token"},
 				"Content-Type":  []string{"application/json"},
 			},
-			Body: []byte(`{"name": "John Doe"}`),
+			Body: []byte("{\"name\": \"John Doe\"}\n"),
+		},
+		{
+			Name:   "Multi-line Body",
+			Method: http.MethodGet,
+			URL: url.URL{
+				Scheme: "http",
+				Host:   "go.dev",
+			},
+			Headers: http.Header{
+				"Authorization": []string{"Bearer token"},
+				"Content-Type":  []string{"application/json"},
+			},
+			Body: []byte("{\n    \"name\": \"John Doe\"\n}\n"),
 		},
 		{
 			Name:   "Test 2",

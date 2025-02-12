@@ -12,6 +12,10 @@ import (
 	"github.com/manifoldco/promptui"
 )
 
+var (
+	preview = flag.Bool("preview", false, "Preview the request")
+)
+
 func main() {
 	flag.Parse()
 
@@ -74,6 +78,18 @@ func runPromptUI(tests []requests.HTTPTest) {
 }
 
 func executeTest(test requests.HTTPTest) {
+	if *preview {
+		fmt.Println(test.Method + " " + test.URL.String())
+		for key, values := range test.Headers {
+			for _, value := range values {
+				fmt.Println(key + ": " + value)
+			}
+		}
+		fmt.Println()
+		fmt.Println(string(test.Body))
+		return
+	}
+
 	req, err := http.NewRequest(test.Method, test.URL.String(), strings.NewReader(string(test.Body)))
 	if err != nil {
 		panic(err)
