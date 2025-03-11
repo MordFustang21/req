@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/MordFustang21/req/pkg/requests"
+	"github.com/TylerBrock/colorjson"
 	"github.com/manifoldco/promptui"
 )
 
@@ -105,6 +107,7 @@ func executeTest(test requests.HTTPTest) {
 	if err != nil {
 		panic(err)
 	}
+	defer resp.Body.Close()
 
 	// Print all response info
 	fmt.Println(resp.Proto + " " + resp.Status)
@@ -118,6 +121,29 @@ func executeTest(test requests.HTTPTest) {
 
 	fmt.Println()
 
-	io.Copy(os.Stdout, resp.Body)
-	resp.Body.Close()
+	printFormattedBody(resp.Header, resp)
+}
+
+func printFormattedBody(headers http.Header, resp *http.Response) {
+	// Detect response encoding
+	encoding := headers.Get("Content-Type")
+	switch encoding {
+	case "application/json":
+		// Decode into a usable JSON object
+		var obj interface{}
+		decoder := json.NewDecoder(resp.Body)
+		err := decoder.Decode(&obj)
+		if err != nil {
+			panic(err)
+		}
+
+		// Pretty print JSON
+		f := colorjson.NewFormatter()
+		f.Indent = 2
+		out, _ := f.Marshal(obj)
+		os.Stdout.Write(out)
+
+	default:
+		io.Copy(os.Stdout, resp.Body)
+	}
 }
