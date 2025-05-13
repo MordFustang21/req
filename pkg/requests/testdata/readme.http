@@ -1,0 +1,15 @@
+@variable=test-variable
+
+### Named requests
+GET https://jsonplaceholder.typicode.com/todos/1
+
+// Header section
+Accept: application/json
+
+// Body section
+{
+  "userId": 1,
+  "id": 1,
+  "title": "delectus aut autem",
+  "completed": false
+}

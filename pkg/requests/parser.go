@@ -47,7 +47,7 @@ func ParseTests(f *os.File) []HTTPTest {
 
 			currentStep++
 			continue
-		case line[0:1] == "//":
+		case strings.HasPrefix(line, "//"):
 			continue
 
 		// This is a variable we need to parse and inject.
@@ -101,7 +101,7 @@ func ParseTests(f *os.File) []HTTPTest {
 			// Parse header line into key and value
 			key, value, ok := strings.Cut(line, ": ")
 			if !ok {
-				panic("invalid header " + line)
+				panic("invalid header: " + line)
 			}
 
 			// Add header to test
