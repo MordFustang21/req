@@ -2,9 +2,16 @@ package requests
 
 import (
 	"bufio"
+	"bytes"
+	"fmt"
+	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 )
 
@@ -21,7 +28,13 @@ func newTest() HTTPTest {
 	}
 }
 
-func ParseTests(f *os.File) []HTTPTest {
+type MultipartPart struct {
+	Headers textproto.MIMEHeader
+	Content []byte
+}
+
+// ParseTests reads a file and parses it into a slice of HTTPTest structs.
+func ParseTests(f io.Reader) ([]HTTPTest, error) {
 	variables := map[string]string{}
 
 	var tests []HTTPTest
@@ -29,107 +42,162 @@ func ParseTests(f *os.File) []HTTPTest {
 
 	currentStep := ParseStepMethodURL
 
-	// Read line by line each test is separated by ###
 	rdr := bufio.NewScanner(f)
+	lineNum := 0
 	for rdr.Scan() {
+		lineNum++
 		line := rdr.Text()
-		// if line starts with a comment skip it
 		switch {
-		// On empty line increment the step
 		case len(line) == 0:
 			if currentStep == ParseStepBody {
-				// We're done with the test, add it to the tests
+				// Finalize multipart if needed
+				if isMultipart(test.Headers) && len(test.Body) > 0 {
+					parts, err := parseMultipartBody(test.Headers, test.Body)
+					if err != nil {
+						return nil, fmt.Errorf("line %d: multipart parse error: %w", lineNum, err)
+					}
+					test.MultipartParts = parts
+				}
 				tests = append(tests, test)
 				test = newTest()
 				currentStep = ParseStepMethodURL
 				continue
 			}
-
 			currentStep++
 			continue
 		case strings.HasPrefix(line, "//"):
 			continue
-
-		// This is a variable we need to parse and inject.
 		case line[0] == '@':
-			// split line into key and value
 			key, value, ok := strings.Cut(line[1:], "=")
 			if !ok {
-				panic("invalid variable " + line)
+				return nil, fmt.Errorf("line %d: invalid variable declaration: %q", lineNum, line)
 			}
-
 			variables[key] = value
 			continue
 		}
 
 		if strings.HasPrefix(line, "###") {
-			// Check for existing test and add it to the tests.
 			if test.Method != "" {
+				if isMultipart(test.Headers) && len(test.Body) > 0 {
+					parts, err := parseMultipartBody(test.Headers, test.Body)
+					if err != nil {
+						return nil, fmt.Errorf("line %d: multipart parse error: %w", lineNum, err)
+					}
+					test.MultipartParts = parts
+				}
 				tests = append(tests, test)
 				currentStep = ParseStepMethodURL
 				test = newTest()
 			}
-
-			// Set test name
 			test.Name = strings.TrimSpace(strings.TrimPrefix(line, "###"))
-			// Reset step
 			currentStep = ParseStepMethodURL
 			continue
 		}
 
 		if currentStep == ParseStepMethodURL {
-			// split line into method and url
 			method, urlStr, ok := strings.Cut(line, " ")
 			if !ok {
-				panic("invalid test url " + line)
+				return nil, fmt.Errorf("line %d: invalid test method/url: %q", lineNum, line)
 			}
-
 			test.Method = method
-
-			// parse the url
 			u, err := url.Parse(injectVariables(variables, urlStr))
 			if err != nil {
-				panic(err)
+				return nil, fmt.Errorf("line %d: invalid url: %q: %w", lineNum, urlStr, err)
 			}
-
 			test.URL = *u
-
 			continue
 		}
 
 		if currentStep == ParseStepHeader {
-			// Parse header line into key and value
 			key, value, ok := strings.Cut(line, ": ")
 			if !ok {
-				panic("invalid header: " + line)
+				return nil, fmt.Errorf("line %d: invalid header: %q", lineNum, line)
 			}
-
-			// Add header to test
 			test.Headers.Add(key, injectVariables(variables, value))
 			continue
 		}
 
 		if currentStep == ParseStepBody {
-			// Add body to test
 			test.Body = append(test.Body, injectVariables(variables, line)+"\n"...)
 			continue
 		}
 	}
+	if err := rdr.Err(); err != nil {
+		return nil, fmt.Errorf("reading file: %w", err)
+	}
 
-	// if test is not empty add it to the tests
-	// this is for the last test
 	if test.Method != "" {
+		if isMultipart(test.Headers) && len(test.Body) > 0 {
+			parts, err := parseMultipartBody(test.Headers, test.Body)
+			if err != nil {
+				return nil, fmt.Errorf("final multipart parse error: %w", err)
+			}
+			test.MultipartParts = parts
+		}
 		tests = append(tests, test)
 	}
 
-	return tests
+	return tests, nil
 }
 
-func injectVariables(variables map[string]string, input string) string {
-	// Replace all variables in the input with their values
-	for key, value := range variables {
-		input = strings.ReplaceAll(input, "{{"+key+"}}", value)
+// Helper to check if Content-Type is multipart/form-data
+func isMultipart(headers http.Header) bool {
+	ct := headers.Get("Content-Type")
+	return strings.HasPrefix(ct, "multipart/form-data")
+}
+
+// Parse multipart body into parts using mime/multipart
+func parseMultipartBody(headers http.Header, body []byte) ([]MultipartPart, error) {
+	ct := headers.Get("Content-Type")
+	_, params, err := mime.ParseMediaType(ct)
+	if err != nil {
+		return nil, fmt.Errorf("parse content-type: %w", err)
 	}
 
-	return input
+	boundary, ok := params["boundary"]
+	if !ok {
+		return nil, fmt.Errorf("missing boundary in multipart/form-data")
+	}
+
+	mr := multipart.NewReader(bytes.NewReader(body), boundary)
+	var parts []MultipartPart
+	for {
+		p, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("reading part: %w", err)
+		}
+		content, err := io.ReadAll(p)
+		if err != nil {
+			return nil, fmt.Errorf("reading part content: %w", err)
+		}
+		parts = append(parts, MultipartPart{
+			Headers: p.Header,
+			Content: content,
+		})
+	}
+
+	return parts, nil
+}
+
+const (
+	placeholderStart = "{{"
+	placeholderEnd   = "}}"
+)
+
+var variablePattern = regexp.MustCompile(`\{\{(\w+)\}\}`)
+
+func injectVariables(variables map[string]string, input string) string {
+	return variablePattern.ReplaceAllStringFunc(input, func(match string) string {
+		key := variablePattern.FindStringSubmatch(match)[1]
+		if val := os.Getenv(key); val != "" {
+			return val
+		}
+		if val, ok := variables[key]; ok {
+			return val
+		}
+		return match // leave as-is if not found
+	})
 }

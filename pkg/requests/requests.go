@@ -6,9 +6,10 @@ import (
 )
 
 type HTTPTest struct {
-	Name    string
-	URL     url.URL
-	Method  string
-	Headers http.Header
-	Body    []byte
+	Name           string
+	URL            url.URL
+	Method         string
+	Headers        http.Header
+	Body           []byte
+	MultipartParts []MultipartPart
 }

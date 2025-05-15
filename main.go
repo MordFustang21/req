@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"os"
 	"strings"
 
@@ -31,7 +34,11 @@ func main() {
 	}
 	defer f.Close()
 
-	tests := requests.ParseTests(f)
+	tests, err := requests.ParseTests(f)
+	if err != nil {
+		panic(err)
+	}
+
 	runPromptUI(tests)
 }
 
@@ -92,14 +99,57 @@ func executeTest(test requests.HTTPTest) {
 		return
 	}
 
-	req, err := http.NewRequest(test.Method, test.URL.String(), strings.NewReader(string(test.Body)))
-	if err != nil {
-		panic(err)
-	}
+	var req *http.Request
+	var err error
 
-	for key, values := range test.Headers {
-		for _, value := range values {
-			req.Header.Add(key, value)
+	if len(test.MultipartParts) > 0 {
+		// Build multipart body
+		var buf bytes.Buffer
+		writer := multipart.NewWriter(&buf)
+		for _, part := range test.MultipartParts {
+			hdr := make(textproto.MIMEHeader)
+			for k, vals := range part.Headers {
+				for _, v := range vals {
+					hdr.Add(k, v)
+				}
+			}
+			w, err := writer.CreatePart(hdr)
+			if err != nil {
+				panic(err)
+			}
+			_, err = w.Write(part.Content)
+			if err != nil {
+				panic(err)
+			}
+		}
+		writer.Close()
+
+		req, err = http.NewRequest(test.Method, test.URL.String(), &buf)
+		if err != nil {
+			panic(err)
+		}
+
+		// Set Content-Type to multipart with boundary
+		req.Header.Set("Content-Type", writer.FormDataContentType())
+
+		// Add other headers except Content-Type (already set)
+		for key, values := range test.Headers {
+			if strings.ToLower(key) == "content-type" {
+				continue
+			}
+			for _, value := range values {
+				req.Header.Add(key, value)
+			}
+		}
+	} else {
+		req, err = http.NewRequest(test.Method, test.URL.String(), strings.NewReader(string(test.Body)))
+		if err != nil {
+			panic(err)
+		}
+		for key, values := range test.Headers {
+			for _, value := range values {
+				req.Header.Add(key, value)
+			}
 		}
 	}
 
