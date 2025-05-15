@@ -29,7 +29,11 @@ func main() {
 	}
 	defer f.Close()
 
-	tests := requests.ParseTests(f)
+	tests, err := requests.ParseTests(f)
+	if err != nil {
+		panic(err)
+	}
+
 	runPromptUI(tests)
 }
 
@@ -67,6 +71,22 @@ func runPromptUI(tests []requests.HTTPTest) {
 	index, _, err := subtestPrompt.Run()
 	switch {
 	case err == nil:
+		if *preview {
+			test := tests[index]
+			fmt.Println(test.Method + " " + test.URL.String())
+
+			for key, values := range test.Headers {
+				for _, value := range values {
+					fmt.Println(key + ": " + value)
+				}
+			}
+
+			fmt.Println()
+			fmt.Println(string(test.Body))
+
+			return
+		}
+
 		requests.ExecuteTest(tests[index], *timing)
 	case err == promptui.ErrInterrupt:
 		fmt.Println("No Test Selected")

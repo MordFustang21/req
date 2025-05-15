@@ -1,10 +1,12 @@
 package requests
 
 import (
+	"bytes"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptrace"
 	"os"
@@ -47,7 +49,41 @@ func ExecuteTest(test HTTPTest, withTiming bool) {
 		},
 	}
 
-	req, err := http.NewRequest(test.Method, test.URL.String(), strings.NewReader(string(test.Body)))
+	var bodyReader io.Reader
+
+	if len(test.MultipartParts) > 0 {
+		var b bytes.Buffer
+		writer := multipart.NewWriter(&b)
+
+		for _, part := range test.MultipartParts {
+			fw, err := writer.CreatePart(part.Headers)
+			if err != nil {
+				panic(err)
+			}
+
+			_, err = fw.Write(part.Content)
+			if err != nil {
+				panic(err)
+			}
+		}
+
+		if err := writer.Close(); err != nil {
+			panic(err)
+		}
+
+		bodyReader = &b
+
+		// Set Content-Type header for multipart
+		if test.Headers == nil {
+			test.Headers = http.Header{}
+		}
+		test.Headers = test.Headers.Clone()
+		test.Headers.Set("Content-Type", writer.FormDataContentType())
+	} else {
+		bodyReader = strings.NewReader(string(test.Body))
+	}
+
+	req, err := http.NewRequest(test.Method, test.URL.String(), bodyReader)
 	if err != nil {
 		panic(err)
 	}

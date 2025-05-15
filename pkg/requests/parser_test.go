@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func Test_parse(t *testing.T) {
@@ -96,7 +97,8 @@ func Test_parse(t *testing.T) {
 			defer f.Close()
 
 			// Parse the tests
-			tests := ParseTests(f)
+			tests, err := ParseTests(f)
+			require.NoError(t, err, "failed to parse tests from file: %s", tc.filePath)
 
 			// Assert the parsed tests match the expected tests
 			assert.Equal(t, tc.expected, tests, "got invalid tests for file: %s", tc.filePath)
