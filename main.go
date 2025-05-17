@@ -1,21 +1,19 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
-	"net/http"
+	"log"
 	"os"
 	"strings"
 
 	"github.com/MordFustang21/req/pkg/requests"
-	"github.com/TylerBrock/colorjson"
 	"github.com/manifoldco/promptui"
 )
 
 var (
 	preview = flag.Bool("preview", false, "Preview the request")
+	timing  = flag.Bool("timing", false, "Show timing information")
 )
 
 func main() {
@@ -27,7 +25,7 @@ func main() {
 
 	f, err := os.Open(flag.Arg(0))
 	if err != nil {
-		panic(err)
+		log.Fatal("error opening .http file", err)
 	}
 	defer f.Close()
 
@@ -69,81 +67,12 @@ func runPromptUI(tests []requests.HTTPTest) {
 	index, _, err := subtestPrompt.Run()
 	switch {
 	case err == nil:
-		executeTest(tests[index])
+		requests.ExecuteTest(tests[index], *timing)
 	case err == promptui.ErrInterrupt:
 		fmt.Println("No Test Selected")
 		os.Exit(0)
 	default:
-		panic(err)
+		fmt.Printf("Prompt failed %v\n", err)
 	}
 
-}
-
-func executeTest(test requests.HTTPTest) {
-	if *preview {
-		fmt.Println(test.Method + " " + test.URL.String())
-		for key, values := range test.Headers {
-			for _, value := range values {
-				fmt.Println(key + ": " + value)
-			}
-		}
-		fmt.Println()
-		fmt.Println(string(test.Body))
-		return
-	}
-
-	req, err := http.NewRequest(test.Method, test.URL.String(), strings.NewReader(string(test.Body)))
-	if err != nil {
-		panic(err)
-	}
-
-	for key, values := range test.Headers {
-		for _, value := range values {
-			req.Header.Add(key, value)
-		}
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		panic(err)
-	}
-	defer resp.Body.Close()
-
-	// Print all response info
-	fmt.Println(resp.Proto + " " + resp.Status)
-
-	// Print out headers
-	for key, values := range resp.Header {
-		for _, value := range values {
-			fmt.Println(key + ": " + value)
-		}
-	}
-
-	fmt.Println()
-
-	printFormattedBody(resp.Header, resp)
-}
-
-func printFormattedBody(headers http.Header, resp *http.Response) {
-	// Detect response encoding
-	encoding := headers.Get("Content-Type")
-	switch encoding {
-	case "application/json":
-		// Decode into a usable JSON object
-		var obj interface{}
-		decoder := json.NewDecoder(resp.Body)
-		err := decoder.Decode(&obj)
-		if err != nil {
-			panic(err)
-		}
-
-		// Pretty print JSON
-		f := colorjson.NewFormatter()
-		f.Indent = 2
-		out, _ := f.Marshal(obj)
-		os.Stdout.Write(out)
-
-	default:
-		io.Copy(os.Stdout, resp.Body)
-	}
 }

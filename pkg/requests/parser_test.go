@@ -21,7 +21,7 @@ func Test_parse(t *testing.T) {
 				{
 					Name:   "Named Request",
 					Method: http.MethodGet,
-					URL: url.URL{
+					URL: &url.URL{
 						Scheme: "http",
 						Host:   "go.dev",
 					},
@@ -34,7 +34,7 @@ func Test_parse(t *testing.T) {
 				{
 					Name:   "Multi-line Body",
 					Method: http.MethodGet,
-					URL: url.URL{
+					URL: &url.URL{
 						Scheme: "http",
 						Host:   "go.dev",
 					},
@@ -47,7 +47,7 @@ func Test_parse(t *testing.T) {
 				{
 					Name:   "Test 2",
 					Method: http.MethodGet,
-					URL: url.URL{
+					URL: &url.URL{
 						Scheme: "http",
 						Host:   "zed.dev",
 					},
@@ -56,7 +56,7 @@ func Test_parse(t *testing.T) {
 				{
 					Name:   "Request with variables",
 					Method: http.MethodGet,
-					URL: url.URL{
+					URL: &url.URL{
 						Scheme: "http",
 						Host:   "zed.dev:8080",
 					},
@@ -72,7 +72,7 @@ func Test_parse(t *testing.T) {
 				{
 					Name:   "Named requests",
 					Method: http.MethodGet,
-					URL: url.URL{
+					URL: &url.URL{
 						Scheme: "https",
 						Host:   "jsonplaceholder.typicode.com",
 						Path:   "/todos/1",

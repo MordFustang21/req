@@ -92,7 +92,7 @@ func ParseTests(f *os.File) []HTTPTest {
 				panic(err)
 			}
 
-			test.URL = *u
+			test.URL = u
 
 			continue
 		}
